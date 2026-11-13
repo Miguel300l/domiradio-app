@@ -1,5 +1,5 @@
 // Emulador Android: 10.0.2.2. Celular real: IP de tu PC (o tu dominio en producción).
-export const API = 'http://localhost:3000';
+export const API = 'https://domiradio-server.vercel.app';
 
 export async function authRequest(mode: 'login' | 'register', body: object) {
   const r = await fetch(`${API}/auth/${mode}`, {
