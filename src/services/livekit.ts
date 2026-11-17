@@ -2,9 +2,13 @@ import { PermissionsAndroid } from 'react-native';
 import { Room, RoomEvent, Participant } from 'livekit-client';
 import { AudioSession } from '@livekit/react-native';
 import { fetchLivekitToken } from './api';
-import { Person, Status } from '../types';
+import { ChatMessage, Person, Status } from '../types';
 
 let room: Room | null = null;
+
+// Mensajes de chat que llegan al instante por LiveKit
+const listeners = new Set<(m: ChatMessage) => void>();
+export const onChat = (cb: (m: ChatMessage) => void) => { listeners.add(cb); return () => { listeners.delete(cb); }; };
 
 const toPerson = (p: Participant): Person => ({
   id: p.identity,
@@ -26,6 +30,13 @@ export async function joinChannel(token: string, onPresence: (p: Person[]) => vo
   room.on(RoomEvent.ParticipantConnected, emit);
   room.on(RoomEvent.ParticipantDisconnected, emit);
   room.on(RoomEvent.ParticipantAttributesChanged, emit);
+  room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+    if (topic !== 'chat' || !participant) return;
+    try {
+      const m = JSON.parse(new TextDecoder().decode(payload)) as ChatMessage;
+      listeners.forEach(cb => cb({ ...m, from: participant.identity })); // el remitente es quien envió el paquete
+    } catch {}
+  });
   await room.connect(r.url, r.token);
   emit();
 }
@@ -40,3 +51,9 @@ export async function leaveChannel() {
   room = null;
   await AudioSession.stopAudioSession();
 }
+
+// Avisa al destinatario al instante (el mensaje ya quedó guardado en el servidor)
+export const pushChat = (m: ChatMessage) =>
+  room?.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(m)), {
+    reliable: true, destinationIdentities: [m.to], topic: 'chat',
+  });
