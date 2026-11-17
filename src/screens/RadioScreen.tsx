@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { setTalking } from '../services/livekit';
+import { onSpeaking, setTalking } from '../services/livekit';
 import { colors, common } from '../theme';
 
 type Props = { online: boolean; count: number };
 
 export default function RadioScreen({ online, count }: Props) {
   const [talking, setTalk] = useState(false);
+  const [speaking, setSpeaking] = useState<string[]>([]);
+  useEffect(() => onSpeaking(setSpeaking), []);
 
   const talk = async (on: boolean) => {
     if (!online) return;
@@ -24,6 +26,7 @@ export default function RadioScreen({ online, count }: Props) {
         <Text style={common.h2}>Canal General</Text>
         <Text style={common.sub}>{count} domiciliarios conectados</Text>
       </View>
+      <Text style={s.speaking}>{speaking.length ? `🔊 ${speaking.join(', ')} está hablando` : ' '}</Text>
       <Pressable
         onPressIn={() => talk(true)}
         onPressOut={() => talk(false)}
@@ -36,6 +39,7 @@ export default function RadioScreen({ online, count }: Props) {
 }
 
 const s = StyleSheet.create({
+  speaking: { color: colors.yellow, fontSize: 22, fontWeight: '800', textAlign: 'center', minHeight: 30 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 16 },
   logo: { color: '#fff', fontSize: 26, fontWeight: '900', fontStyle: 'italic' },
   badge: { backgroundColor: '#1E8E3E', color: '#fff', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, overflow: 'hidden' },

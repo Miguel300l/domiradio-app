@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, FlatList, TextInput, TouchableOpacity, Alert, StyleSheet } from 'react-native';
 import { fetchUsers, fetchMessages, sendMessage } from '../services/chat';
 import { onChat, pushChat } from '../services/livekit';
-import { ChatMessage, ChatUser } from '../types';
+import { ChatMessage, ChatUser, Conversation } from '../types';
 import { colors, common } from '../theme';
 
 function Room({ token, other, onBack }: { token: string; other: ChatUser; onBack: () => void }) {
@@ -74,32 +74,25 @@ function Room({ token, other, onBack }: { token: string; other: ChatUser; onBack
   );
 }
 
-export default function ChatScreen({ token }: { token: string }) {
+function Picker({ token, onPick, onBack }: { token: string; onPick: (u: ChatUser) => void; onBack: () => void }) {
   const [users, setUsers] = useState<ChatUser[]>([]);
-  const [open, setOpen] = useState<ChatUser | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try { setUsers(await fetchUsers(token)); } catch {}
-    setLoading(false);
-  }, [token]);
-  useEffect(() => { load(); }, [load]);
-
-  if (open) return <Room token={token} other={open} onBack={() => setOpen(null)} />;
+  const [q, setQ] = useState('');
+  useEffect(() => { fetchUsers(token).then(setUsers).catch(() => {}); }, [token]);
+  const list = users.filter(u => u.name.toLowerCase().includes(q.trim().toLowerCase()));
   return (
     <View style={common.flex}>
-      <Text style={[common.h2, { margin: 20 }]}>Chat</Text>
+      <View style={s.header}>
+        <TouchableOpacity onPress={onBack}><Text style={s.back}>←</Text></TouchableOpacity>
+        <Text style={common.h2}>Nuevo chat</Text>
+      </View>
+      <TextInput style={s.search} value={q} onChangeText={setQ} placeholder="Buscar domiciliario" placeholderTextColor="#888" />
       <FlatList
-        data={users}
+        data={list}
         keyExtractor={u => u.id}
-        refreshing={loading}
-        onRefresh={load}
         contentContainerStyle={{ padding: 16 }}
-        ListEmptyComponent={<Text style={common.sub}>Aún no hay otros usuarios registrados</Text>}
+        ListEmptyComponent={<Text style={common.sub}>Sin resultados</Text>}
         renderItem={({ item }) => (
-          <TouchableOpacity style={[common.card, { flexDirection: 'row', alignItems: 'center' }]} onPress={() => setOpen(item)}>
-            <Text style={{ fontSize: 28, marginRight: 12 }}>💬</Text>
+          <TouchableOpacity style={common.card} onPress={() => onPick(item)}>
             <Text style={[common.h2, { textAlign: 'left' }]}>{item.name}</Text>
           </TouchableOpacity>
         )}
@@ -108,7 +101,53 @@ export default function ChatScreen({ token }: { token: string }) {
   );
 }
 
+const hhmm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+export default function ChatScreen({ token, convs, reload }: { token: string; convs: Conversation[]; reload: () => void }) {
+  const [open, setOpen] = useState<ChatUser | null>(null);
+  const [picking, setPicking] = useState(false);
+
+  if (open) return <Room token={token} other={open} onBack={() => { setOpen(null); reload(); }} />;
+  if (picking) return <Picker token={token} onBack={() => setPicking(false)} onPick={u => { setPicking(false); setOpen(u); }} />;
+
+  return (
+    <View style={common.flex}>
+      <View style={[s.header, { justifyContent: 'space-between' }]}>
+        <Text style={common.h2}>Chat</Text>
+        <TouchableOpacity style={s.newBtn} onPress={() => setPicking(true)}><Text style={common.btnTxt}>+ Nuevo</Text></TouchableOpacity>
+      </View>
+      <FlatList
+        data={convs}
+        keyExtractor={c => c.id}
+        contentContainerStyle={{ padding: 16 }}
+        refreshing={false}
+        onRefresh={reload}
+        ListEmptyComponent={<Text style={common.sub}>Aún no tienes conversaciones. Toca "+ Nuevo" para escribirle a alguien.</Text>}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={[common.card, s.convRow]} onPress={() => setOpen({ id: item.id, name: item.name })}>
+            <View style={{ flex: 1 }}>
+              <Text style={[common.h2, { textAlign: 'left', fontWeight: item.unread ? '800' : '600' }]}>{item.name}</Text>
+              <Text numberOfLines={1} style={{ color: item.unread ? '#fff' : '#999', fontSize: 15 }}>
+                {item.last.from !== item.id ? 'Tú: ' : ''}{item.last.text}
+              </Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={{ color: '#999', fontSize: 12 }}>{hhmm(item.last.createdAt)}</Text>
+              {item.unread > 0 && <View style={s.badge}><Text style={s.badgeTxt}>{item.unread}</Text></View>}
+            </View>
+          </TouchableOpacity>
+        )}
+      />
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
+  search: { backgroundColor: colors.card, color: '#fff', borderRadius: 14, marginHorizontal: 16, paddingHorizontal: 14, height: 46 },
+  newBtn: { backgroundColor: colors.yellow, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 10 },
+  convRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  badge: { backgroundColor: '#FF4136', minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, marginTop: 6 },
+  badgeTxt: { color: '#fff', fontSize: 12, fontWeight: '700' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 16 },
   back: { color: colors.yellow, fontSize: 28 },
   bubble: { maxWidth: '80%', borderRadius: 14, padding: 10, marginBottom: 8 },

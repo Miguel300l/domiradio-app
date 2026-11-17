@@ -10,6 +10,10 @@ let room: Room | null = null;
 const listeners = new Set<(m: ChatMessage) => void>();
 export const onChat = (cb: (m: ChatMessage) => void) => { listeners.add(cb); return () => { listeners.delete(cb); }; };
 
+// Quién está hablando ahora mismo en la radio
+const speakListeners = new Set<(names: string[]) => void>();
+export const onSpeaking = (cb: (names: string[]) => void) => { speakListeners.add(cb); return () => { speakListeners.delete(cb); }; };
+
 const toPerson = (p: Participant): Person => ({
   id: p.identity,
   name: p.name || 'Domiciliario',
@@ -30,6 +34,11 @@ export async function joinChannel(token: string, onPresence: (p: Person[]) => vo
   room.on(RoomEvent.ParticipantConnected, emit);
   room.on(RoomEvent.ParticipantDisconnected, emit);
   room.on(RoomEvent.ParticipantAttributesChanged, emit);
+  room.on(RoomEvent.ParticipantNameChanged, emit);
+  room.on(RoomEvent.ActiveSpeakersChanged, speakers => {
+    const names = speakers.filter(p => !p.isLocal).map(p => p.name || 'Alguien');
+    speakListeners.forEach(cb => cb(names));
+  });
   room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
     if (topic !== 'chat' || !participant) return;
     try {
@@ -57,3 +66,6 @@ export const pushChat = (m: ChatMessage) =>
   room?.localParticipant.publishData(new TextEncoder().encode(JSON.stringify(m)), {
     reliable: true, destinationIdentities: [m.to], topic: 'chat',
   });
+
+// Cambia el nombre visible de este usuario en la sala sin reconectar
+export const renameMe = (name: string) => room?.localParticipant.setName(name);
